@@ -56,9 +56,55 @@ function buildUI() {
   const htmlString = `
     <div class="container">
       <header>
-        <h1>📸 System Snapshot Viewer</h1>
-        <p class="subtitle">View and manage system snapshots</p>
+        <div class="header-row">
+          <div>
+            <h1>📸 System Snapshot Viewer</h1>
+            <p class="subtitle">View and manage system snapshots</p>
+          </div>
+          <button id="settingsBtn" class="btn btn-settings" title="Settings">⚙️</button>
+        </div>
       </header>
+
+      <div id="settingsPanel" class="settings-panel" style="display: none;">
+        <div class="settings-content">
+          <div class="settings-header">
+            <h3>⚙️ Settings</h3>
+            <button id="closeSettingsBtn" class="btn btn-close-settings">✕</button>
+          </div>
+          <div class="settings-body">
+            <div class="setting-item">
+              <label class="setting-label">
+                <span>Automatic Snapshots</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="autoSnapshotToggle" />
+                  <span class="toggle-slider"></span>
+                </div>
+              </label>
+              <p class="setting-desc">Automatically take snapshots at a regular interval</p>
+            </div>
+            <div class="setting-item">
+              <label class="setting-label" for="autoSnapshotInterval">
+                <span>Interval (minutes)</span>
+                <input type="number" id="autoSnapshotInterval" class="input-field setting-input" min="1" max="1440" value="5" />
+              </label>
+              <p class="setting-desc">How often to take automatic snapshots (1–1440 min)</p>
+            </div>
+            <div id="autoSnapshotStatus" class="setting-status">Auto-snapshots: Off</div>
+            <div class="setting-item">
+              <p class="setting-label"><span>Include in snapshot:</span></p>
+              <div class="test-selector">
+                <label class="test-option"><input type="checkbox" id="test-cpu"       checked> 💻 CPU &amp; OS</label>
+                <label class="test-option"><input type="checkbox" id="test-memory"    checked> 🧠 Memory</label>
+                <label class="test-option"><input type="checkbox" id="test-processes" checked> ⚙️ Processes</label>
+                <label class="test-option"><input type="checkbox" id="test-network"   checked> 🌐 Network</label>
+                <label class="test-option"><input type="checkbox" id="test-disk"      checked> 💾 Disk &amp; FS</label>
+                <label class="test-option"><input type="checkbox" id="test-users"     checked> 👤 Users</label>
+              </div>
+              <p class="setting-desc">Select which categories to collect in snapshots</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="main-content">
         <div class="sidebar">
@@ -71,17 +117,7 @@ function buildUI() {
               style="margin-bottom: 10px;"
             />
 
-            <div class="test-selector">
-              <p class="test-selector-label">Include in snapshot:</p>
-              <label class="test-option"><input type="checkbox" id="test-cpu"       checked> 💻 CPU &amp; OS</label>
-              <label class="test-option"><input type="checkbox" id="test-memory"    checked> 🧠 Memory</label>
-              <label class="test-option"><input type="checkbox" id="test-processes" checked> ⚙️ Processes</label>
-              <label class="test-option"><input type="checkbox" id="test-network"   checked> 🌐 Network</label>
-              <label class="test-option"><input type="checkbox" id="test-disk"      checked> 💾 Disk &amp; FS</label>
-              <label class="test-option"><input type="checkbox" id="test-users"     checked> 👤 Users</label>
-            </div>
-
-            <button id="newSnapshotBtn" class="btn btn-primary" style="margin-top: 10px;">
+            <button id="newSnapshotBtn" class="btn btn-primary">
               📷 Take Snapshot
             </button>
           </div>
@@ -350,6 +386,66 @@ newSnapshotBtn.addEventListener('click', () => {
   });
 
   console.log('Event listeners attached');
+
+  // --- Settings panel ---
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsPanel = document.getElementById('settingsPanel');
+  const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  const autoSnapshotToggle = document.getElementById('autoSnapshotToggle');
+  const autoSnapshotIntervalInput = document.getElementById('autoSnapshotInterval');
+  const autoSnapshotStatus = document.getElementById('autoSnapshotStatus');
+
+  function updateStatusText(enabled, minutes) {
+    autoSnapshotStatus.textContent = enabled
+      ? `Auto-snapshots: On (every ${minutes} min)`
+      : 'Auto-snapshots: Off';
+    autoSnapshotStatus.className = 'setting-status ' + (enabled ? 'status-on' : '');
+  }
+
+  // Load current settings from main process
+  (async () => {
+    try {
+      const settings = await ipcRenderer.invoke('get-auto-snapshot-settings');
+      autoSnapshotToggle.checked = settings.enabled;
+      autoSnapshotIntervalInput.value = settings.minutes;
+      updateStatusText(settings.enabled, settings.minutes);
+    } catch (e) { console.error('Failed to load settings:', e); }
+  })();
+
+  settingsBtn.addEventListener('click', () => {
+    settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
+  });
+
+  closeSettingsBtn.addEventListener('click', () => {
+    settingsPanel.style.display = 'none';
+  });
+
+  autoSnapshotToggle.addEventListener('change', async () => {
+    const enabled = autoSnapshotToggle.checked;
+    const minutes = parseInt(autoSnapshotIntervalInput.value, 10) || 5;
+    if (enabled) {
+      await ipcRenderer.invoke('start-auto-snapshot', minutes);
+    } else {
+      await ipcRenderer.invoke('stop-auto-snapshot');
+    }
+    updateStatusText(enabled, minutes);
+  });
+
+  autoSnapshotIntervalInput.addEventListener('change', async () => {
+    let minutes = parseInt(autoSnapshotIntervalInput.value, 10);
+    if (!minutes || minutes < 1) minutes = 1;
+    if (minutes > 1440) minutes = 1440;
+    autoSnapshotIntervalInput.value = minutes;
+    await ipcRenderer.invoke('set-auto-snapshot-interval', minutes);
+    if (autoSnapshotToggle.checked) {
+      updateStatusText(true, minutes);
+    }
+  });
+
+  // Refresh list when an auto-snapshot is taken
+  ipcRenderer.on('snapshot-taken', () => {
+    loadSnapshotList();
+  });
 
   // Load snapshots on startup
   console.log('Loading snapshot list...');
