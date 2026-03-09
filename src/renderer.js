@@ -59,10 +59,6 @@ function buildUI() {
         <h1> System Snapshot Viewer</h1>
         <p class="subtitle">View and manage system snapshots</p>
         <div class="header-row">
-          <div>
-            <h1>📸 System Snapshot Viewer</h1>
-            <p class="subtitle">View and manage system snapshots</p>
-          </div>
           <button id="settingsBtn" class="btn btn-settings" title="Settings">⚙️</button>
         </div>
       </header>
@@ -122,9 +118,7 @@ function buildUI() {
               style="margin-bottom: 10px;"
             />
 
-            <button id="newSnapshotBtn" class="btn btn-primary">
-              📷 Take Snapshot
-            </button>
+            
           </div>
 
           <div class="snapshot-list-container">
