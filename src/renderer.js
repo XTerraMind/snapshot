@@ -56,6 +56,8 @@ function buildUI() {
   const htmlString = `
     <div class="container">
       <header>
+        <h1> System Snapshot Viewer</h1>
+        <p class="subtitle">View and manage system snapshots</p>
         <div class="header-row">
           <div>
             <h1>📸 System Snapshot Viewer</h1>
@@ -109,6 +111,9 @@ function buildUI() {
       <div class="main-content">
         <div class="sidebar">
           <div class="snapshot-controls">
+            <button id="newSnapshotBtn" class="btn btn-primary">
+               Take New Snapshot
+            </button>
             <input 
               type="text" 
               id="snapshotName" 
@@ -135,7 +140,7 @@ function buildUI() {
 
         <div class="main-view">
           <div id="emptyState" class="empty-state">
-            <p>👈 Select a snapshot to view details</p>
+            <p> Select a snapshot to view details</p>
           </div>
 
           <div id="snapshotDetail" class="snapshot-detail" style="display: none;">
@@ -150,29 +155,29 @@ function buildUI() {
                 <select id="compareSelect" class="input-field" style="max-width: 200px;">
                   <option value="">Compare with...</option>
                 </select>
-                <button id="compareBtn" class="btn btn-primary">📊 Compare</button>
-                <button id="uploadBtn" class="btn btn-upload">☁️ Upload</button>
-                <button id="deleteBtn" class="btn btn-danger">🗑️ Delete</button>
+                <button id="compareBtn" class="btn btn-primary"> Compare</button>
+                <button id="uploadBtn" class="btn btn-upload"> Upload</button>
+                <button id="deleteBtn" class="btn btn-danger"> Delete</button>
               </div>
             </div>
 
             <div id="comparisonView" class="comparison-view" style="display: none;">
-              <h3>📊 Comparison Results</h3>
+              <h3> Comparison Results</h3>
               <div class="comparison-grid">
                 <div class="comparison-card">
-                  <h4>🆕 New Processes</h4>
+                  <h4> New Processes</h4>
                   <div id="newProcessesList" class="comparison-list"></div>
                 </div>
                 <div class="comparison-card">
-                  <h4>❌ Removed Processes</h4>
+                  <h4> Removed Processes</h4>
                   <div id="removedProcessesList" class="comparison-list"></div>
                 </div>
                 <div class="comparison-card">
-                  <h4>📈 Process Changes</h4>
+                  <h4> Process Changes</h4>
                   <div id="processChangesList" class="comparison-list"></div>
                 </div>
                 <div class="comparison-card">
-                  <h4>🔌 New Listening Ports</h4>
+                  <h4> New Listening Ports</h4>
                   <div id="newPortsList" class="comparison-list"></div>
                 </div>
               </div>
@@ -180,7 +185,7 @@ function buildUI() {
 
             <div class="detail-content">
               <section class="system-info">
-                <h3>💻 System Information</h3>
+                <h3> System Information</h3>
                 <div class="info-grid">
                   <div class="info-item">
                     <span class="label">CPU Manufacturer</span>
@@ -210,7 +215,7 @@ function buildUI() {
               </section>
 
               <section class="network-section">
-                <h3>🌐 Network</h3>
+                <h3> Network</h3>
                 <div class="network-info">
                   <div>
                     <strong>Network Interfaces:</strong>
@@ -224,12 +229,12 @@ function buildUI() {
               </section>
 
               <section class="filesystem-section">
-                <h3>💾 File System</h3>
+                <h3> File System</h3>
                 <div id="filesystemInfo" class="details-list"></div>
               </section>
 
               <section class="processes-section">
-                <h3>⚙️ Running Processes</h3>
+                <h3> Running Processes</h3>
                 <div class="search-bar">
                   <input 
                     type="text" 
