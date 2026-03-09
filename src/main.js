@@ -2,7 +2,7 @@ const si = require('systeminformation');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const https = require('https');
 const http = require('http');
 
@@ -173,11 +173,11 @@ async function takeSnapshot(filename, tests = {}) {
     };
 
     // Save it as a local JSON file (works 100% offline)
-    const savePath = path.join(app.getPath('userData'), `${filename}.json`);
+    const savePath = path.join(getSnapshotDir(), `${filename}.json`);
     console.log(`Saving to: ${savePath}`);
     
     // Ensure directory exists
-    const dir = app.getPath('userData');
+    const dir = getSnapshotDir();
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
       console.log(`Created directory: ${dir}`);
@@ -220,7 +220,7 @@ ipcMain.handle('take-snapshot', async (event, filename, tests) => {
 
 ipcMain.handle('list-snapshots', async (event) => {
   try {
-    const snapshotDir = app.getPath('userData');
+    const snapshotDir = getSnapshotDir();
     const files = fs.readdirSync(snapshotDir).filter(f => f.endsWith('.json') && f !== '_snapshot_settings.json');
     return files.map(f => f.replace('.json', ''));
   } catch (e) {
@@ -231,7 +231,7 @@ ipcMain.handle('list-snapshots', async (event) => {
 
 ipcMain.handle('load-snapshot', async (event, filename) => {
   try {
-    const snapshotPath = path.join(app.getPath('userData'), `${filename}.json`);
+    const snapshotPath = path.join(getSnapshotDir(), `${filename}.json`);
     const data = fs.readFileSync(snapshotPath, 'utf-8');
     return JSON.parse(data);
   } catch (e) {
@@ -242,7 +242,7 @@ ipcMain.handle('load-snapshot', async (event, filename) => {
 
 ipcMain.handle('delete-snapshot', async (event, filename) => {
   try {
-    const snapshotPath = path.join(app.getPath('userData'), `${filename}.json`);
+    const snapshotPath = path.join(getSnapshotDir(), `${filename}.json`);
     fs.unlinkSync(snapshotPath);
     return true;
   } catch (e) {
@@ -253,8 +253,8 @@ ipcMain.handle('delete-snapshot', async (event, filename) => {
 
 ipcMain.handle('compare-snapshots', async (event, baselineName, afterName) => {
   try {
-    const baselinePath = path.join(app.getPath('userData'), `${baselineName}.json`);
-    const afterPath = path.join(app.getPath('userData'), `${afterName}.json`);
+    const baselinePath = path.join(getSnapshotDir(), `${baselineName}.json`);
+    const afterPath = path.join(getSnapshotDir(), `${afterName}.json`);
     
     const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf-8'));
     const after = JSON.parse(fs.readFileSync(afterPath, 'utf-8'));
@@ -403,7 +403,7 @@ ipcMain.handle('upload-snapshot', async (event, filename) => {
     }
 
     // Load the local snapshot
-    const snapshotPath = path.join(app.getPath('userData'), `${filename}.json`);
+    const snapshotPath = path.join(getSnapshotDir(), `${filename}.json`);
     const data = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
 
     const completedData = withStatus(data, 'Completed');
@@ -472,6 +472,13 @@ let autoSnapshotInterval = null;
 let autoSnapshotMinutes = 5;
 let autoSnapshotEnabled = false;
 let maxSnapshots = 0; // 0 = unlimited
+let testDefaults = { cpu: true, memory: true, processes: true, network: true, disk: true, users: true };
+let customSnapshotDir = null; // null = use default userData path
+
+// Returns the active snapshot data directory
+function getSnapshotDir() {
+  return customSnapshotDir || app.getPath('userData');
+}
 
 // --- Settings persistence ---
 function getSettingsPath() {
@@ -484,13 +491,23 @@ function loadSettings() {
     if (fs.existsSync(p)) {
       const s = JSON.parse(fs.readFileSync(p, 'utf-8'));
       maxSnapshots = s.maxSnapshots ?? 0;
+      autoSnapshotMinutes = s.autoSnapshotMinutes ?? 5;
+      autoSnapshotEnabled = s.autoSnapshotEnabled ?? false;
+      customSnapshotDir = s.customSnapshotDir ?? null;
+      if (s.testDefaults) testDefaults = { ...testDefaults, ...s.testDefaults };
     }
   } catch (e) { console.error('Failed to load settings:', e); }
 }
 
 function saveSettings() {
   try {
-    fs.writeFileSync(getSettingsPath(), JSON.stringify({ maxSnapshots }));
+    fs.writeFileSync(getSettingsPath(), JSON.stringify({
+      maxSnapshots,
+      autoSnapshotEnabled,
+      autoSnapshotMinutes,
+      testDefaults,
+      customSnapshotDir
+    }));
   } catch (e) { console.error('Failed to save settings:', e); }
 }
 
@@ -498,7 +515,7 @@ function saveSettings() {
 function enforceRetentionLimit() {
   if (maxSnapshots <= 0) return; // unlimited
   try {
-    const snapshotDir = app.getPath('userData');
+    const snapshotDir = getSnapshotDir();
     const files = fs.readdirSync(snapshotDir)
       .filter(f => f.endsWith('.json') && f !== '_snapshot_settings.json');
 
@@ -528,7 +545,7 @@ function enforceRetentionLimit() {
 // --- Pin/unpin ---
 ipcMain.handle('set-snapshot-pinned', async (event, filename, pinned) => {
   try {
-    const snapshotPath = path.join(app.getPath('userData'), `${filename}.json`);
+    const snapshotPath = path.join(getSnapshotDir(), `${filename}.json`);
     const data = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
     data.metadata.pinned = pinned;
     fs.writeFileSync(snapshotPath, JSON.stringify(data, null, 2));
@@ -568,6 +585,7 @@ function startAutoSnapshot(minutes) {
   }
   stopAutoSnapshot();
   autoSnapshotEnabled = true;
+  saveSettings();
 
   // Take one immediately on start
   takeSnapshot(`snapshot_${formatSnapshotTimestamp()}_auto`)
@@ -594,6 +612,7 @@ function stopAutoSnapshot() {
     autoSnapshotInterval = null;
   }
   autoSnapshotEnabled = false;
+  saveSettings();
 }
 
 ipcMain.handle('start-auto-snapshot', (event, minutes) => {
@@ -608,6 +627,7 @@ ipcMain.handle('stop-auto-snapshot', () => {
 
 ipcMain.handle('set-auto-snapshot-interval', (event, minutes) => {
   autoSnapshotMinutes = minutes;
+  saveSettings();
   if (autoSnapshotInterval) {
     startAutoSnapshot(); // restart with new interval
   }
@@ -618,9 +638,77 @@ ipcMain.handle('get-auto-snapshot-settings', () => {
   return { enabled: autoSnapshotEnabled, minutes: autoSnapshotMinutes };
 });
 
+// --- Test defaults persistence ---
+ipcMain.handle('get-test-defaults', () => testDefaults);
+
+ipcMain.handle('set-test-defaults', (event, tests) => {
+  testDefaults = { ...testDefaults, ...tests };
+  saveSettings();
+  return true;
+});
+
+// --- Data folder management ---
+ipcMain.handle('get-data-folder', () => getSnapshotDir());
+
+ipcMain.handle('open-data-folder', async () => {
+  const dir = getSnapshotDir();
+  await shell.openPath(dir);
+  return true;
+});
+
+ipcMain.handle('move-data-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select new data folder',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled || !result.filePaths.length) return { success: false, canceled: true };
+
+  const newDir = result.filePaths[0];
+  const oldDir = getSnapshotDir();
+
+  if (newDir === oldDir) return { success: true, path: newDir };
+
+  try {
+    // Ensure the new directory exists
+    if (!fs.existsSync(newDir)) {
+      fs.mkdirSync(newDir, { recursive: true });
+    }
+
+    // Move all snapshot JSON files from old to new
+    const files = fs.readdirSync(oldDir).filter(f => f.endsWith('.json') && f !== '_snapshot_settings.json');
+    for (const file of files) {
+      const src = path.join(oldDir, file);
+      const dest = path.join(newDir, file);
+      fs.copyFileSync(src, dest);
+      fs.unlinkSync(src);
+    }
+
+    customSnapshotDir = newDir;
+    saveSettings();
+
+    // Open the new folder in file explorer
+    await shell.openPath(newDir);
+
+    return { success: true, path: newDir };
+  } catch (e) {
+    console.error('Error moving data folder:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('reset-data-folder', async () => {
+  customSnapshotDir = null;
+  saveSettings();
+  return { success: true, path: app.getPath('userData') };
+});
+
 // 3. Run the app and test our function
 app.whenReady().then(() => {
   loadSettings();
   createWindow();
+  // Resume auto-snapshot if it was enabled before shutdown
+  if (autoSnapshotEnabled) {
+    startAutoSnapshot(autoSnapshotMinutes);
+  }
 });
 

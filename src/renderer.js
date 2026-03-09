@@ -109,6 +109,16 @@ function buildUI() {
               </div>
               <p class="setting-desc">Select which categories to collect in snapshots</p>
             </div>
+            <div class="setting-item">
+              <p class="setting-label"><span>Data Folder</span></p>
+              <div id="dataFolderPath" class="data-folder-path">Loading...</div>
+              <div class="data-folder-buttons">
+                <button id="openDataFolderBtn" class="btn btn-small">📂 Open</button>
+                <button id="moveDataFolderBtn" class="btn btn-small btn-primary">📁 Move</button>
+                <button id="resetDataFolderBtn" class="btn btn-small btn-danger">↩️ Reset</button>
+              </div>
+              <p class="setting-desc">Where snapshot files are stored on disk</p>
+            </div>
           </div>
         </div>
       </div>
@@ -154,10 +164,10 @@ function buildUI() {
                 <select id="compareSelect" class="input-field" style="max-width: 200px;">
                   <option value="">Compare with...</option>
                 </select>
-                <button id="compareBtn" class="btn btn-primary">📊 Compare</button>
-                <button id="pinBtn" class="btn btn-pin">📌 Pin</button>
-                <button id="uploadBtn" class="btn btn-upload">☁️ Upload</button>
-                <button id="deleteBtn" class="btn btn-danger">🗑️ Delete</button>
+                <button id="compareBtn" class="btn btn-primary"> Compare</button>
+                <button id="pinBtn" class="btn btn-pin"> Pin</button>
+                <button id="uploadBtn" class="btn btn-upload"> Upload</button>
+                <button id="deleteBtn" class="btn btn-danger"> Delete</button>
               </div>
             </div>
 
@@ -306,6 +316,25 @@ function initializeApp() {
     users:     document.getElementById('test-users'),
   };
 
+  // Load saved test defaults
+  (async () => {
+    try {
+      const defaults = await ipcRenderer.invoke('get-test-defaults');
+      Object.entries(defaults).forEach(([key, val]) => {
+        if (testCheckboxes[key]) testCheckboxes[key].checked = val;
+      });
+    } catch (e) { console.error('Failed to load test defaults:', e); }
+  })();
+
+  // Save test defaults when any checkbox changes
+  Object.entries(testCheckboxes).forEach(([key, el]) => {
+    if (el) el.addEventListener('change', async () => {
+      const tests = {};
+      Object.entries(testCheckboxes).forEach(([k, cb]) => { tests[k] = cb?.checked ?? true; });
+      await ipcRenderer.invoke('set-test-defaults', tests);
+    });
+  });
+
   console.log('DOM elements retrieved');
   console.log('newSnapshotBtn:', !!newSnapshotBtn);
   console.log('snapshotList:', !!snapshotList);
@@ -435,6 +464,56 @@ newSnapshotBtn.addEventListener('click', () => {
   });
 
   console.log('Event listeners attached');
+
+  // --- Data folder ---
+  const dataFolderPath = document.getElementById('dataFolderPath');
+  const openDataFolderBtn = document.getElementById('openDataFolderBtn');
+  const moveDataFolderBtn = document.getElementById('moveDataFolderBtn');
+  const resetDataFolderBtn = document.getElementById('resetDataFolderBtn');
+
+  async function refreshDataFolderPath() {
+    try {
+      const p = await ipcRenderer.invoke('get-data-folder');
+      dataFolderPath.textContent = p;
+    } catch (e) { dataFolderPath.textContent = 'Unknown'; }
+  }
+  refreshDataFolderPath();
+
+  openDataFolderBtn.addEventListener('click', async () => {
+    await ipcRenderer.invoke('open-data-folder');
+  });
+
+  moveDataFolderBtn.addEventListener('click', async () => {
+    moveDataFolderBtn.disabled = true;
+    moveDataFolderBtn.textContent = '⏳ Moving...';
+    try {
+      const result = await ipcRenderer.invoke('move-data-folder');
+      if (result.success) {
+        await refreshDataFolderPath();
+        await loadSnapshotList();
+      } else if (!result.canceled) {
+        alert(`Failed to move data folder: ${result.error}`);
+      }
+    } catch (e) {
+      alert(`Error: ${e.message}`);
+    } finally {
+      moveDataFolderBtn.disabled = false;
+      moveDataFolderBtn.textContent = '📁 Move';
+    }
+  });
+
+  resetDataFolderBtn.addEventListener('click', async () => {
+    if (!confirm('Reset data folder to the default location? Existing files in the custom folder will NOT be moved back.')) return;
+    try {
+      const result = await ipcRenderer.invoke('reset-data-folder');
+      if (result.success) {
+        await refreshDataFolderPath();
+        await loadSnapshotList();
+      }
+    } catch (e) {
+      alert(`Error: ${e.message}`);
+    }
+  });
 
   // --- Settings panel ---
   const settingsBtn = document.getElementById('settingsBtn');
